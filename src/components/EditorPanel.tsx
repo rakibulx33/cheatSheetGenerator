@@ -1,109 +1,50 @@
-import { useState } from 'react';
-import { templates, fonts, languagePresets, type CheatsheetConfig, type CheatsheetSection, type CheatsheetItem } from '@/data/cheatsheetData';
+import { type Block, type BlockType, type CheatsheetDoc, createBlock, fonts, cheatsheetTemplates } from '@/data/cheatsheetData';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Trash2, Plus, ChevronDown, ChevronRight, FileDown, LayoutTemplate } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import {
+  Trash2, FileDown, Type, Code2, Image, Table2, Minus, Space, List, Heading,
+  AlignLeft, AlignCenter, AlignRight, Bold, Italic, Plus, Minus as MinusIcon,
+  LayoutTemplate,
+} from 'lucide-react';
 
 interface Props {
-  config: CheatsheetConfig;
-  onChange: (config: CheatsheetConfig) => void;
+  doc: CheatsheetDoc;
+  selectedBlockId: string | null;
+  selectedBlock: Block | null;
+  onUpdateDoc: (updates: Partial<CheatsheetDoc>) => void;
+  onAddBlock: (type: BlockType) => void;
+  onDeleteBlock: (id: string) => void;
+  onUpdateBlock: (id: string, updates: Partial<Block>) => void;
+  onLoadTemplate: (doc: CheatsheetDoc) => void;
   onExportPdf: () => void;
   isExporting: boolean;
 }
 
-const generateId = () => Math.random().toString(36).substring(2, 9);
+const blockTypes: { type: BlockType; icon: React.ReactNode; label: string }[] = [
+  { type: 'heading', icon: <Heading className="w-4 h-4" />, label: 'Heading' },
+  { type: 'text', icon: <Type className="w-4 h-4" />, label: 'Text' },
+  { type: 'code', icon: <Code2 className="w-4 h-4" />, label: 'Code' },
+  { type: 'image', icon: <Image className="w-4 h-4" />, label: 'Image' },
+  { type: 'table', icon: <Table2 className="w-4 h-4" />, label: 'Table' },
+  { type: 'list', icon: <List className="w-4 h-4" />, label: 'List' },
+  { type: 'divider', icon: <Minus className="w-4 h-4" />, label: 'Divider' },
+  { type: 'spacer', icon: <Space className="w-4 h-4" />, label: 'Spacer' },
+];
 
-export default function EditorPanel({ config, onChange, onExportPdf, isExporting }: Props) {
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
-
-  const toggleSection = (id: string) => {
-    setExpandedSections(prev => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  };
-
-  const updateField = <K extends keyof CheatsheetConfig>(key: K, value: CheatsheetConfig[K]) => {
-    onChange({ ...config, [key]: value });
-  };
-
-  const updateColor = (key: keyof CheatsheetConfig['customColors'], value: string) => {
-    onChange({ ...config, customColors: { ...config.customColors, [key]: value } });
-  };
-
-  const loadPreset = (lang: string) => {
-    const preset = languagePresets[lang];
-    if (!preset) return;
-    onChange({
-      ...config,
-      title: preset.title,
-      subtitle: preset.subtitle,
-      language: lang,
-      sections: preset.sections,
-    });
-  };
-
-  const addSection = () => {
-    const newSection: CheatsheetSection = {
-      id: generateId(),
-      title: 'New Section',
-      items: [{ id: generateId(), label: 'Label', code: 'code here', description: 'Description' }],
-    };
-    updateField('sections', [...config.sections, newSection]);
-    setExpandedSections(prev => new Set(prev).add(newSection.id));
-  };
-
-  const removeSection = (id: string) => {
-    updateField('sections', config.sections.filter(s => s.id !== id));
-  };
-
-  const updateSection = (id: string, key: keyof CheatsheetSection, value: string) => {
-    updateField('sections', config.sections.map(s => s.id === id ? { ...s, [key]: value } : s));
-  };
-
-  const addItem = (sectionId: string) => {
-    updateField('sections', config.sections.map(s =>
-      s.id === sectionId
-        ? { ...s, items: [...s.items, { id: generateId(), label: 'New Item', code: 'code', description: '' }] }
-        : s
-    ));
-  };
-
-  const removeItem = (sectionId: string, itemId: string) => {
-    updateField('sections', config.sections.map(s =>
-      s.id === sectionId ? { ...s, items: s.items.filter(i => i.id !== itemId) } : s
-    ));
-  };
-
-  const updateItem = (sectionId: string, itemId: string, key: keyof CheatsheetItem, value: string) => {
-    updateField('sections', config.sections.map(s =>
-      s.id === sectionId
-        ? { ...s, items: s.items.map(i => i.id === itemId ? { ...i, [key]: value } : i) }
-        : s
-    ));
-  };
-
-  const colorFields: { key: keyof CheatsheetConfig['customColors']; label: string }[] = [
-    { key: 'pageBg', label: 'Page BG' },
-    { key: 'headerBg', label: 'Header BG' },
-    { key: 'headerText', label: 'Header Text' },
-    { key: 'sectionBg', label: 'Section BG' },
-    { key: 'sectionTitle', label: 'Section Title' },
-    { key: 'codeBg', label: 'Code BG' },
-    { key: 'codeText', label: 'Code Text' },
-    { key: 'labelText', label: 'Label Text' },
-  ];
+export default function EditorPanel({
+  doc, selectedBlockId, selectedBlock, onUpdateDoc, onAddBlock, onDeleteBlock,
+  onUpdateBlock, onLoadTemplate, onExportPdf, isExporting,
+}: Props) {
 
   return (
     <div className="flex flex-col h-full bg-card border-r border-border">
-      {/* Header */}
       <div className="p-4 border-b border-border flex items-center justify-between">
-        <h2 className="font-display text-lg font-bold text-foreground">Cheatsheet Editor</h2>
+        <h2 className="font-display text-lg font-bold text-foreground">Cheatsheet Builder</h2>
         <Button onClick={onExportPdf} disabled={isExporting} size="sm" className="gap-2">
           <FileDown className="w-4 h-4" />
           {isExporting ? 'Exporting…' : 'Export PDF'}
@@ -111,56 +52,18 @@ export default function EditorPanel({ config, onChange, onExportPdf, isExporting
       </div>
 
       <ScrollArea className="flex-1">
-        <div className="p-4 space-y-6">
-          {/* Language Preset */}
-          <div className="space-y-2">
-            <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Language Preset</Label>
-            <div className="flex flex-wrap gap-2">
-              {Object.keys(languagePresets).map(lang => (
-                <Button
-                  key={lang}
-                  variant={config.language === lang ? 'default' : 'secondary'}
-                  size="sm"
-                  onClick={() => loadPreset(lang)}
-                  className="text-xs capitalize"
-                >
-                  {lang}
-                </Button>
-              ))}
-            </div>
-          </div>
-
-          <Separator />
-
-          {/* Title & Subtitle */}
-          <div className="space-y-3">
-            <div>
-              <Label className="text-xs text-muted-foreground">Title</Label>
-              <Input value={config.title} onChange={e => updateField('title', e.target.value)} className="mt-1" />
-            </div>
-            <div>
-              <Label className="text-xs text-muted-foreground">Subtitle</Label>
-              <Input value={config.subtitle} onChange={e => updateField('subtitle', e.target.value)} className="mt-1" />
-            </div>
-          </div>
-
-          <Separator />
-
-          {/* Template */}
+        <div className="p-4 space-y-5">
+          {/* Templates */}
           <div className="space-y-2">
             <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-              <LayoutTemplate className="w-3.5 h-3.5" /> Template
+              <LayoutTemplate className="w-3.5 h-3.5" /> Templates
             </Label>
             <div className="grid grid-cols-1 gap-2">
-              {templates.map(t => (
+              {cheatsheetTemplates.map((t) => (
                 <button
                   key={t.id}
-                  onClick={() => updateField('template', t)}
-                  className={`text-left p-3 rounded-lg border transition-all ${
-                    config.template.id === t.id
-                      ? 'border-primary bg-primary/10'
-                      : 'border-border bg-secondary/50 hover:border-muted-foreground/30'
-                  }`}
+                  onClick={() => onLoadTemplate(t.doc)}
+                  className="text-left p-3 rounded-lg border border-border bg-secondary/50 hover:border-primary/50 hover:bg-primary/5 transition-all"
                 >
                   <div className="text-sm font-semibold text-foreground">{t.name}</div>
                   <div className="text-xs text-muted-foreground mt-0.5">{t.description}</div>
@@ -171,129 +74,272 @@ export default function EditorPanel({ config, onChange, onExportPdf, isExporting
 
           <Separator />
 
-          {/* Font & Columns */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label className="text-xs text-muted-foreground">Font</Label>
-              <Select value={config.font} onValueChange={v => updateField('font', v)}>
-                <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {fonts.map(f => (
-                    <SelectItem key={f} value={f} style={{ fontFamily: f }}>{f}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          {/* Document Settings */}
+          <div className="space-y-3">
+            <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Document</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-xs text-muted-foreground">Font</Label>
+                <Select value={doc.font} onValueChange={(v) => onUpdateDoc({ font: v })}>
+                  <SelectTrigger className="mt-1 h-8 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {fonts.map((f) => <SelectItem key={f} value={f} style={{ fontFamily: f }}>{f}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">Columns</Label>
+                <Select value={String(doc.columns)} onValueChange={(v) => onUpdateDoc({ columns: Number(v) })}>
+                  <SelectTrigger className="mt-1 h-8 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {[1, 2, 3, 4].map((n) => <SelectItem key={n} value={String(n)}>{n} Col{n > 1 ? 's' : ''}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div>
-              <Label className="text-xs text-muted-foreground">Columns</Label>
-              <Select
-                value={String(config.template.columns)}
-                onValueChange={v => updateField('template', { ...config.template, columns: Number(v) })}
-              >
-                <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {[1, 2, 3, 4].map(n => (
-                    <SelectItem key={n} value={String(n)}>{n} Column{n > 1 ? 's' : ''}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={doc.bgColor}
+                onChange={(e) => onUpdateDoc({ bgColor: e.target.value })}
+                className="w-7 h-7 rounded border border-border cursor-pointer bg-transparent"
+              />
+              <span className="text-xs text-muted-foreground">Background Color</span>
             </div>
           </div>
 
           <Separator />
 
-          {/* Colors */}
+          {/* Add Block */}
           <div className="space-y-2">
-            <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Colors</Label>
-            <div className="grid grid-cols-2 gap-2">
-              {colorFields.map(({ key, label }) => (
-                <div key={key} className="flex items-center gap-2">
-                  <input
-                    type="color"
-                    value={config.customColors[key]}
-                    onChange={e => updateColor(key, e.target.value)}
-                    className="w-7 h-7 rounded border border-border cursor-pointer bg-transparent"
-                  />
-                  <span className="text-xs text-muted-foreground">{label}</span>
-                </div>
+            <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Add Block</Label>
+            <div className="grid grid-cols-4 gap-1.5">
+              {blockTypes.map(({ type, icon, label }) => (
+                <button
+                  key={type}
+                  onClick={() => onAddBlock(type)}
+                  className="flex flex-col items-center gap-1 p-2 rounded-lg border border-border bg-secondary/50 hover:border-primary/50 hover:bg-primary/10 transition-all text-muted-foreground hover:text-primary"
+                >
+                  {icon}
+                  <span className="text-[10px] font-medium">{label}</span>
+                </button>
               ))}
             </div>
           </div>
 
           <Separator />
 
-          {/* Sections */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Sections</Label>
-              <Button variant="ghost" size="sm" onClick={addSection} className="h-7 text-xs gap-1">
-                <Plus className="w-3 h-3" /> Add
-              </Button>
-            </div>
+          {/* Selected Block Properties */}
+          {selectedBlock ? (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  {selectedBlock.type.charAt(0).toUpperCase() + selectedBlock.type.slice(1)} Properties
+                </Label>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onDeleteBlock(selectedBlockId!)}
+                  className="h-7 text-xs text-destructive hover:text-destructive gap-1"
+                >
+                  <Trash2 className="w-3 h-3" /> Delete
+                </Button>
+              </div>
 
-            <div className="space-y-2">
-              {config.sections.map(section => {
-                const isExpanded = expandedSections.has(section.id);
-                return (
-                  <div key={section.id} className="border border-border rounded-lg overflow-hidden">
-                    <div
-                      className="flex items-center gap-2 px-3 py-2 bg-secondary/50 cursor-pointer hover:bg-secondary/80 transition-colors"
-                      onClick={() => toggleSection(section.id)}
-                    >
-                      {isExpanded ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />}
-                      <Input
-                        value={section.title}
-                        onChange={e => { e.stopPropagation(); updateSection(section.id, 'title', e.target.value); }}
-                        onClick={e => e.stopPropagation()}
-                        className="h-7 text-sm font-semibold bg-transparent border-none p-0 focus-visible:ring-0"
-                      />
-                      <Button variant="ghost" size="sm" onClick={e => { e.stopPropagation(); removeSection(section.id); }} className="h-6 w-6 p-0 text-destructive hover:text-destructive">
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </div>
-
-                    {isExpanded && (
-                      <div className="p-3 space-y-3">
-                        {section.items.map(item => (
-                          <div key={item.id} className="space-y-1.5 p-2 bg-muted/50 rounded-md">
-                            <div className="flex gap-2">
-                              <Input
-                                value={item.label}
-                                onChange={e => updateItem(section.id, item.id, 'label', e.target.value)}
-                                placeholder="Label"
-                                className="h-7 text-xs flex-1"
-                              />
-                              <Button variant="ghost" size="sm" onClick={() => removeItem(section.id, item.id)} className="h-7 w-7 p-0 text-destructive hover:text-destructive">
-                                <Trash2 className="w-3 h-3" />
-                              </Button>
-                            </div>
-                            <textarea
-                              value={item.code}
-                              onChange={e => updateItem(section.id, item.id, 'code', e.target.value)}
-                              placeholder="Code"
-                              className="w-full text-xs font-mono bg-background border border-border rounded px-2 py-1.5 resize-none"
-                              rows={2}
-                            />
-                            <Input
-                              value={item.description || ''}
-                              onChange={e => updateItem(section.id, item.id, 'description', e.target.value)}
-                              placeholder="Description (optional)"
-                              className="h-7 text-xs"
-                            />
-                          </div>
-                        ))}
-                        <Button variant="ghost" size="sm" onClick={() => addItem(section.id)} className="w-full h-7 text-xs gap-1">
-                          <Plus className="w-3 h-3" /> Add Item
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+              <BlockProperties block={selectedBlock} onUpdate={(u) => onUpdateBlock(selectedBlockId!, u)} />
             </div>
-          </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground text-xs">
+              Click a block in the preview to edit its properties
+            </div>
+          )}
         </div>
       </ScrollArea>
+    </div>
+  );
+}
+
+function BlockProperties({ block, onUpdate }: { block: Block; onUpdate: (u: Partial<Block>) => void }) {
+  switch (block.type) {
+    case 'heading':
+      return (
+        <div className="space-y-3">
+          <div>
+            <Label className="text-xs text-muted-foreground">Level</Label>
+            <Select value={String(block.level)} onValueChange={(v) => onUpdate({ level: Number(v) as 1 | 2 | 3 })}>
+              <SelectTrigger className="mt-1 h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1">H1 — Large</SelectItem>
+                <SelectItem value="2">H2 — Medium</SelectItem>
+                <SelectItem value="3">H3 — Small</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <AlignmentPicker value={block.align} onChange={(v) => onUpdate({ align: v })} />
+          <ColorField label="Color" value={block.color} onChange={(v) => onUpdate({ color: v })} />
+        </div>
+      );
+    case 'text':
+      return (
+        <div className="space-y-3">
+          <NumberField label="Font Size" value={block.fontSize} onChange={(v) => onUpdate({ fontSize: v })} min={10} max={32} />
+          <AlignmentPicker value={block.align} onChange={(v) => onUpdate({ align: v })} />
+          <div className="flex gap-2">
+            <Button variant={block.bold ? 'default' : 'secondary'} size="sm" onClick={() => onUpdate({ bold: !block.bold })} className="h-8 w-8 p-0">
+              <Bold className="w-3.5 h-3.5" />
+            </Button>
+            <Button variant={block.italic ? 'default' : 'secondary'} size="sm" onClick={() => onUpdate({ italic: !block.italic })} className="h-8 w-8 p-0">
+              <Italic className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+          <ColorField label="Color" value={block.color} onChange={(v) => onUpdate({ color: v })} />
+        </div>
+      );
+    case 'code':
+      return (
+        <div className="space-y-3">
+          <div>
+            <Label className="text-xs text-muted-foreground">Language</Label>
+            <Input value={block.language} onChange={(e) => onUpdate({ language: e.target.value })} className="mt-1 h-8 text-xs" />
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground">Label</Label>
+            <Input value={block.label} onChange={(e) => onUpdate({ label: e.target.value })} className="mt-1 h-8 text-xs" />
+          </div>
+          <div className="flex items-center gap-2">
+            <Switch checked={block.showLabel} onCheckedChange={(v) => onUpdate({ showLabel: v })} />
+            <span className="text-xs text-muted-foreground">Show Label</span>
+          </div>
+          <ColorField label="Background" value={block.bgColor} onChange={(v) => onUpdate({ bgColor: v })} />
+          <ColorField label="Text Color" value={block.textColor} onChange={(v) => onUpdate({ textColor: v })} />
+        </div>
+      );
+    case 'image':
+      return (
+        <div className="space-y-3">
+          <NumberField label="Width %" value={block.width} onChange={(v) => onUpdate({ width: v })} min={10} max={100} />
+          <NumberField label="Border Radius" value={block.borderRadius} onChange={(v) => onUpdate({ borderRadius: v })} min={0} max={50} />
+          <AlignmentPicker value={block.align} onChange={(v) => onUpdate({ align: v })} />
+          <div>
+            <Label className="text-xs text-muted-foreground">Alt Text</Label>
+            <Input value={block.alt} onChange={(e) => onUpdate({ alt: e.target.value })} className="mt-1 h-8 text-xs" />
+          </div>
+        </div>
+      );
+    case 'table':
+      return (
+        <div className="space-y-3">
+          <ColorField label="Header BG" value={block.headerBg} onChange={(v) => onUpdate({ headerBg: v })} />
+          <ColorField label="Header Text" value={block.headerText} onChange={(v) => onUpdate({ headerText: v })} />
+          <ColorField label="Cell BG" value={block.cellBg} onChange={(v) => onUpdate({ cellBg: v })} />
+          <ColorField label="Cell Text" value={block.cellText} onChange={(v) => onUpdate({ cellText: v })} />
+          <ColorField label="Border" value={block.borderColor} onChange={(v) => onUpdate({ borderColor: v })} />
+          <div className="flex gap-2">
+            <Button variant="secondary" size="sm" className="text-xs h-7" onClick={() => {
+              const newRows = block.rows.map(r => [...r, '']);
+              newRows[0][newRows[0].length - 1] = `Col ${newRows[0].length}`;
+              onUpdate({ rows: newRows });
+            }}>
+              <Plus className="w-3 h-3 mr-1" /> Column
+            </Button>
+            <Button variant="secondary" size="sm" className="text-xs h-7" onClick={() => {
+              const cols = block.rows[0]?.length || 2;
+              onUpdate({ rows: [...block.rows, Array(cols).fill('')] });
+            }}>
+              <Plus className="w-3 h-3 mr-1" /> Row
+            </Button>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="secondary" size="sm" className="text-xs h-7" onClick={() => {
+              if (block.rows[0]?.length <= 1) return;
+              onUpdate({ rows: block.rows.map(r => r.slice(0, -1)) });
+            }}>
+              <MinusIcon className="w-3 h-3 mr-1" /> Column
+            </Button>
+            <Button variant="secondary" size="sm" className="text-xs h-7" onClick={() => {
+              if (block.rows.length <= 1) return;
+              onUpdate({ rows: block.rows.slice(0, -1) });
+            }}>
+              <MinusIcon className="w-3 h-3 mr-1" /> Row
+            </Button>
+          </div>
+        </div>
+      );
+    case 'divider':
+      return (
+        <div className="space-y-3">
+          <div>
+            <Label className="text-xs text-muted-foreground">Style</Label>
+            <Select value={block.style} onValueChange={(v) => onUpdate({ style: v as 'solid' | 'dashed' | 'dotted' })}>
+              <SelectTrigger className="mt-1 h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="solid">Solid</SelectItem>
+                <SelectItem value="dashed">Dashed</SelectItem>
+                <SelectItem value="dotted">Dotted</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <NumberField label="Thickness" value={block.thickness} onChange={(v) => onUpdate({ thickness: v })} min={1} max={8} />
+          <ColorField label="Color" value={block.color} onChange={(v) => onUpdate({ color: v })} />
+        </div>
+      );
+    case 'spacer':
+      return (
+        <div className="space-y-3">
+          <NumberField label="Height (px)" value={block.height} onChange={(v) => onUpdate({ height: v })} min={4} max={120} />
+        </div>
+      );
+    case 'list':
+      return (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Switch checked={block.ordered} onCheckedChange={(v) => onUpdate({ ordered: v })} />
+            <span className="text-xs text-muted-foreground">Numbered List</span>
+          </div>
+          <NumberField label="Font Size" value={block.fontSize} onChange={(v) => onUpdate({ fontSize: v })} min={10} max={24} />
+          <ColorField label="Color" value={block.color} onChange={(v) => onUpdate({ color: v })} />
+          <Button variant="secondary" size="sm" className="text-xs h-7" onClick={() => onUpdate({ items: [...block.items, 'New item'] })}>
+            <Plus className="w-3 h-3 mr-1" /> Add Item
+          </Button>
+          {block.items.length > 1 && (
+            <Button variant="secondary" size="sm" className="text-xs h-7" onClick={() => onUpdate({ items: block.items.slice(0, -1) })}>
+              <MinusIcon className="w-3 h-3 mr-1" /> Remove Last
+            </Button>
+          )}
+        </div>
+      );
+    default:
+      return null;
+  }
+}
+
+function AlignmentPicker({ value, onChange }: { value: string; onChange: (v: 'left' | 'center' | 'right') => void }) {
+  return (
+    <div className="flex gap-1">
+      {([['left', AlignLeft], ['center', AlignCenter], ['right', AlignRight]] as const).map(([align, Icon]) => (
+        <Button key={align} variant={value === align ? 'default' : 'secondary'} size="sm" onClick={() => onChange(align)} className="h-8 w-8 p-0">
+          <Icon className="w-3.5 h-3.5" />
+        </Button>
+      ))}
+    </div>
+  );
+}
+
+function ColorField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="flex items-center gap-2">
+      <input type="color" value={value} onChange={(e) => onChange(e.target.value)} className="w-7 h-7 rounded border border-border cursor-pointer bg-transparent" />
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <Input value={value} onChange={(e) => onChange(e.target.value)} className="h-7 text-xs w-20 ml-auto" />
+    </div>
+  );
+}
+
+function NumberField({ label, value, onChange, min, max }: { label: string; value: number; onChange: (v: number) => void; min: number; max: number }) {
+  return (
+    <div>
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <Input type="number" value={value} min={min} max={max} onChange={(e) => onChange(Number(e.target.value))} className="mt-1 h-8 text-xs" />
     </div>
   );
 }
