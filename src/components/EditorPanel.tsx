@@ -168,6 +168,7 @@ export default function EditorPanel({
               </div>
 
               <BlockProperties block={selectedBlock} onUpdate={(u) => onUpdateBlock(selectedBlockId!, u)} />
+            </div>
           ) : (
             <div className="text-center py-8 text-muted-foreground text-xs">
               Click a block in the preview to edit its properties
