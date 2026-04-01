@@ -1,4 +1,5 @@
-import { forwardRef, useEffect, useRef } from 'react';
+import { forwardRef, useEffect, useRef, useState } from 'react';
+import { useDroppable } from '@dnd-kit/core';
 import { Rnd } from 'react-rnd';
 import type { Block, CheatsheetDoc } from '@/data/cheatsheetData';
 
@@ -11,32 +12,52 @@ interface Props {
 
 const CanvasArtboard = forwardRef<HTMLDivElement, Props>(
   ({ doc, selectedBlockId, onSelectBlock, onUpdateBlock }, ref) => {
+    const { setNodeRef } = useDroppable({
+      id: 'canvas-droppable',
+    });
+
+    const setRefs = (node: HTMLDivElement | null) => {
+      setNodeRef(node);
+      if (typeof ref === 'function') ref(node);
+      else if (ref) (ref as any).current = node;
+    };
     
     // A4 Portrait dimensions at 96 DPI (standard web)
     const A4_WIDTH = 794;
     const A4_HEIGHT = 1123;
+    const pages = doc.totalPages || 1;
   
     const canvasStyle: React.CSSProperties = {
       background: doc.bgColor,
       fontFamily: doc.font,
       position: 'relative',
       margin: '0 auto',
+      width: A4_WIDTH,
+      height: A4_HEIGHT * pages,
       boxShadow: '0 10px 40px -10px rgba(0,0,0,0.1)',
       border: '1px solid hsl(var(--border))',
-      ...(doc.canvasMode === 'a4' 
-        ? { width: A4_WIDTH, height: A4_HEIGHT, overflow: 'hidden' } 
-        : { width: '100%', minHeight: A4_HEIGHT, overflow: 'visible' }),
+      overflow: 'hidden',
     };
 
     return (
       <div
-        ref={ref}
+        ref={setRefs}
         style={canvasStyle}
         onClick={(e) => {
-          if (e.target === e.currentTarget) onSelectBlock(null);
+          if (e.target === e.currentTarget || (e.target as Element).classList.contains('page-divider')) onSelectBlock(null);
         }}
         className="canvas-artboard bg-white"
       >
+        {Array.from({ length: pages }).map((_, i) => (
+          i > 0 && (
+            <div 
+              key={`page-${i}`} 
+              className="page-divider w-full absolute border-t-2 border-dashed border-red-500/30 z-[5]" 
+              style={{ top: i * A4_HEIGHT, cursor: 'pointer' }}
+              onClick={() => onSelectBlock(null)}
+            />
+          )
+        ))}
         {doc.blocks.map((block) => {
           const isSelected = selectedBlockId === block.id;
 
@@ -175,6 +196,9 @@ function EditableText({ block, onUpdate, isSelected }: { block: Extract<Block, {
 }
 
 function EditableCode({ block, onUpdate, isSelected }: { block: Extract<Block, { type: 'code' }>; onUpdate: (u: Partial<Block>) => void; isSelected: boolean }) {
+  const [localCode, setLocalCode] = useState(block.code);
+  useEffect(() => { setLocalCode(block.code); }, [block.code]);
+
   return (
     <div style={{ borderRadius: '6px', overflow: 'hidden', width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
       {block.showLabel && (
@@ -194,8 +218,9 @@ function EditableCode({ block, onUpdate, isSelected }: { block: Extract<Block, {
       )}
       {isSelected ? (
         <textarea
-          value={block.code}
-          onChange={(e) => onUpdate({ code: e.target.value })}
+          value={localCode}
+          onChange={(e) => setLocalCode(e.target.value)}
+          onBlur={() => onUpdate({ code: localCode })}
           onClick={(e) => e.stopPropagation()}
           style={{
             flex: 1,

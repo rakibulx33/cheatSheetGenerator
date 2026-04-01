@@ -81,7 +81,7 @@ export interface CheatsheetDoc {
   bgColor: string;
   font: string;
   blocks: Block[];
-  canvasMode: 'a4' | 'infinite';
+  totalPages: number;
 }
 
 const id = () => Math.random().toString(36).substring(2, 9);
@@ -126,7 +126,7 @@ export const cheatsheetTemplates: Template[] = [
       title: 'HTML5 Cheatsheet',
       bgColor: '#0f172a',
       font: 'Inter',
-      canvasMode: 'a4',
+      totalPages: 1,
       blocks: [
         { id: id(), type: 'heading', content: 'HTML5 Quick Reference', level: 1, align: 'center', color: '#5eead4', x: 200, y: 50, width: 400, height: 'auto' },
         { id: id(), type: 'text', content: 'Essential HTML tags and attributes for modern web development', align: 'center', color: '#94a3b8', fontSize: 14, bold: false, italic: true, x: 200, y: 110, width: 400, height: 'auto' },
@@ -150,7 +150,7 @@ export const cheatsheetTemplates: Template[] = [
       title: 'CSS3 Cheatsheet',
       bgColor: '#0a0a0a',
       font: 'JetBrains Mono',
-      canvasMode: 'a4',
+      totalPages: 1,
       blocks: [
         { id: id(), type: 'heading', content: '$ css3 --cheatsheet', level: 1, align: 'left', color: '#22c55e', x: 50, y: 50, width: 700, height: 'auto' },
         { id: id(), type: 'divider', style: 'dashed', color: '#22c55e', thickness: 1, x: 50, y: 100, width: 700, height: 20 },
@@ -173,7 +173,7 @@ export const cheatsheetTemplates: Template[] = [
       title: 'MySQL Cheatsheet',
       bgColor: '#fafaf9',
       font: 'Space Grotesk',
-      canvasMode: 'a4',
+      totalPages: 1,
       blocks: [
         { id: id(), type: 'heading', content: 'MySQL Quick Reference', level: 1, align: 'left', color: '#1c1917', x: 50, y: 50, width: 330, height: 'auto' },
         { id: id(), type: 'text', content: 'Essential SQL commands for database management', align: 'left', color: '#57534e', fontSize: 14, bold: false, italic: false, x: 50, y: 110, width: 330, height: 'auto' },

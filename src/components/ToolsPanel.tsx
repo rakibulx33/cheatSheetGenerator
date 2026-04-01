@@ -1,3 +1,5 @@
+import { useState, useEffect } from 'react';
+import { useDraggable } from '@dnd-kit/core';
 import { type BlockType, type CheatsheetDoc, cheatsheetTemplates, fonts } from '@/data/cheatsheetData';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -27,6 +29,12 @@ const blockTypes: { type: BlockType; icon: React.ReactNode; label: string }[] = 
 ];
 
 export default function ToolsPanel({ doc, onUpdateDoc, onAddBlock, onLoadTemplate, onExportPdf, isExporting }: Props) {
+  const [bgColor, setBgColor] = useState(doc.bgColor);
+  
+  useEffect(() => {
+    setBgColor(doc.bgColor);
+  }, [doc.bgColor]);
+
   return (
     <div className="flex flex-col h-full bg-card border-r border-border w-[280px]">
       <div className="p-4 border-b border-border">
@@ -44,14 +52,12 @@ export default function ToolsPanel({ doc, onUpdateDoc, onAddBlock, onLoadTemplat
               <Plus className="w-3.5 h-3.5" /> Blocks
             </Label>
             <div className="grid grid-cols-2 gap-2">
-              {blockTypes.map(({ type, icon, label }) => (
-                <button
-                  key={type}
-                  onClick={() => onAddBlock(type)}
-                  className="flex items-center gap-2 p-2 rounded border border-border bg-secondary/30 hover:bg-primary/10 hover:border-primary/40 hover:text-primary text-muted-foreground transition-all text-xs font-medium"
-                >
-                  {icon} {label}
-                </button>
+              {blockTypes.map((item) => (
+                <DraggableBlockButton 
+                  key={item.type} 
+                  {...item} 
+                  onClick={() => onAddBlock(item.type)} 
+                />
               ))}
             </div>
           </div>
@@ -60,28 +66,6 @@ export default function ToolsPanel({ doc, onUpdateDoc, onAddBlock, onLoadTemplat
 
           <div className="space-y-4">
             <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Document Settings</Label>
-            
-            <div>
-              <Label className="text-xs text-muted-foreground">Canvas Mode</Label>
-              <div className="flex gap-2 mt-1">
-                <Button 
-                  variant={doc.canvasMode === 'a4' ? 'default' : 'secondary'} 
-                  size="sm" 
-                  className="flex-1 h-8 text-xs"
-                  onClick={() => onUpdateDoc({ canvasMode: 'a4' })}
-                >
-                  <LayoutGrid className="w-3 h-3 mr-1" /> A4 Layout
-                </Button>
-                <Button 
-                  variant={doc.canvasMode === 'infinite' ? 'default' : 'secondary'} 
-                  size="sm" 
-                  className="flex-1 h-8 text-xs"
-                  onClick={() => onUpdateDoc({ canvasMode: 'infinite' })}
-                >
-                  <Monitor className="w-3 h-3 mr-1" /> Infinite
-                </Button>
-              </div>
-            </div>
 
             <div>
               <Label className="text-xs text-muted-foreground">Global Font</Label>
@@ -96,8 +80,9 @@ export default function ToolsPanel({ doc, onUpdateDoc, onAddBlock, onLoadTemplat
             <div className="flex items-center gap-2">
               <input
                 type="color"
-                value={doc.bgColor}
-                onChange={(e) => onUpdateDoc({ bgColor: e.target.value })}
+                value={bgColor}
+                onChange={(e) => setBgColor(e.target.value)}
+                onBlur={() => onUpdateDoc({ bgColor })}
                 className="w-7 h-7 rounded border border-border cursor-pointer bg-transparent"
               />
               <span className="text-xs text-muted-foreground">Canvas Background</span>
@@ -132,4 +117,28 @@ export default function ToolsPanel({ doc, onUpdateDoc, onAddBlock, onLoadTemplat
 
 function Plus(props: any) {
   return <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M5 12h14"/><path d="M12 5v14"/></svg>;
+}
+
+function DraggableBlockButton({ type, icon, label, onClick }: any) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `tool-${type}`,
+    data: { type },
+  });
+  
+  return (
+    <button
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
+      onClick={onClick}
+      style={{
+        transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+        zIndex: isDragging ? 50 : undefined,
+        opacity: isDragging ? 0.5 : 1,
+      }}
+      className="flex items-center justify-start gap-2 p-2 rounded border border-border bg-secondary/30 hover:bg-primary/10 hover:border-primary/40 hover:text-primary text-muted-foreground transition-all text-xs font-medium cursor-grab active:cursor-grabbing"
+    >
+      {icon} {label}
+    </button>
+  );
 }

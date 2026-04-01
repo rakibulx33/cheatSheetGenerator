@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { DndContext, type DragEndEvent } from '@dnd-kit/core';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { type Block, type BlockType, type CheatsheetDoc, createBlock, cheatsheetTemplates } from '@/data/cheatsheetData';
@@ -122,8 +123,28 @@ export default function Index() {
     }
   }, [doc.bgColor, doc.title]);
 
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && over.id === 'canvas-droppable') {
+      const type = active.data.current?.type as BlockType;
+      if (type) {
+        const activeRect = active.rect.current.translated;
+        const overRect = over.rect;
+        const dropX = (activeRect && overRect) ? Math.max(0, activeRect.left - overRect.left) : 50;
+        const dropY = (activeRect && overRect) ? Math.max(0, activeRect.top - overRect.top) : 50;
+        
+        const block = createBlock(type);
+        block.x = Math.round(dropX);
+        block.y = Math.round(dropY);
+        setDoc((prev) => ({ ...prev, blocks: [...prev.blocks, block] }));
+        setSelectedBlockId(block.id);
+      }
+    }
+  }, [setDoc]);
+
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-background">
+    <DndContext onDragEnd={handleDragEnd}>
+      <div className="flex h-screen w-screen overflow-hidden bg-background">
       
       {/* Left Sidebar: Tools & Settings */}
       <ToolsPanel
@@ -137,11 +158,10 @@ export default function Index() {
 
       {/* Center Artboard Area */}
       <div 
-        className="flex-1 overflow-auto bg-neutral-100/50 p-8 relative flex shadow-inner" 
+        className="flex-1 overflow-auto bg-neutral-100/50 p-8 relative flex flex-col items-center gap-8 shadow-inner" 
         onClick={() => setSelectedBlockId(null)}
       >
-        {/* We use margin auto to keep it centered if infinite, or strictly centered if A4 */}
-        <div className="m-auto animate-fade-in">
+        <div className="animate-fade-in flex-shrink-0">
           <CanvasArtboard
             ref={previewRef}
             doc={doc}
@@ -150,6 +170,13 @@ export default function Index() {
             onUpdateBlock={updateBlock}
           />
         </div>
+        
+        <button 
+          onClick={(e) => { e.stopPropagation(); updateDoc({ totalPages: (doc.totalPages || 1) + 1 }) }}
+          className="px-4 py-2 bg-white border border-border shadow-sm rounded-md text-sm font-medium text-muted-foreground hover:bg-neutral-50 hover:text-foreground transition-all flex items-center gap-2 mb-12 flex-shrink-0"
+        >
+          Add New Page
+        </button>
       </div>
 
       {/* Right Sidebar: Selected Block Properties */}
@@ -160,6 +187,7 @@ export default function Index() {
         onUpdateBlock={updateBlock}
       />
 
-    </div>
+      </div>
+    </DndContext>
   );
 }
