@@ -93,35 +93,92 @@ export default function Index() {
 
   const exportPdf = useCallback(async () => {
     if (!previewRef.current) return;
+    const el = previewRef.current;
     setIsExporting(true);
-    try {
-      // Temporarily deselect for clean export without resize handles 
-      setSelectedBlockId(null);
-      await new Promise((r) => setTimeout(r, 100));
+    setSelectedBlockId(null);
 
-      const canvas = await html2canvas(previewRef.current, {
+    // Wait for React to flush the deselect + load all fonts
+    await new Promise((r) => setTimeout(r, 300));
+    await document.fonts.ready;
+
+    // Toggle CSS class that strips border/shadow/dividers (see index.css)
+    el.classList.add('exporting');
+    // Force browser reflow so the class takes effect before capture
+    el.getBoundingClientRect();
+
+    const A4_W = 794;
+    const A4_H = 1123;
+    const pages = doc.totalPages || 1;
+
+    try {
+      const canvas = await html2canvas(el, {
         scale: 2,
         useCORS: true,
-        backgroundColor: doc.bgColor,
-      });
-      const imgData = canvas.toDataURL('image/png');
-      const pdfW = canvas.width * 0.264583;
-      const pdfH = canvas.height * 0.264583;
+        allowTaint: true,
+        backgroundColor: null, // use element's own bg
+        width: A4_W,
+        height: A4_H * pages,
+        scrollX: 0,
+        scrollY: 0,
+        logging: false,
+        onclone: async (clonedDoc) => {
+          const clonedEl = clonedDoc.querySelector('.canvas-artboard') as HTMLElement;
+          if (clonedEl) {
+            clonedEl.style.border = 'none';
+            clonedEl.style.boxShadow = 'none';
+            clonedEl.style.overflow = 'visible';
+            clonedEl.querySelectorAll('.page-divider').forEach((d) => d.remove());
 
-      const pdf = new jsPDF({
-        orientation: pdfW > pdfH ? 'landscape' : 'portrait',
-        unit: 'mm',
-        format: [pdfW, pdfH],
+            // Fix html2canvas letter-spacing bug:
+            // html2canvas renders each character individually when letter-spacing != 0,
+            // causing visible gaps. Reset to normal on ALL elements inside the canvas.
+            clonedEl.querySelectorAll<HTMLElement>('*').forEach((node) => {
+              node.style.letterSpacing = 'normal';
+              node.style.wordSpacing = 'normal';
+            });
+            clonedEl.style.letterSpacing = 'normal';
+            clonedEl.style.wordSpacing = 'normal';
+          }
+
+          // Inject the Google Fonts stylesheet into the cloned document
+          const fontLink = clonedDoc.createElement('link');
+          fontLink.rel = 'stylesheet';
+          fontLink.href = 'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&family=Poppins:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@400;500;600;700&display=swap';
+          clonedDoc.head.appendChild(fontLink);
+
+          await new Promise((resolve) => {
+            fontLink.onload = resolve;
+            fontLink.onerror = resolve;
+            setTimeout(resolve, 3000);
+          });
+          await clonedDoc.fonts.ready;
+        },
       });
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfW, pdfH);
+
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const sliceH = Math.round(canvas.height / pages);
+
+      for (let pg = 0; pg < pages; pg++) {
+        const pageCanvas = document.createElement('canvas');
+        pageCanvas.width = canvas.width;
+        pageCanvas.height = sliceH;
+        const ctx = pageCanvas.getContext('2d')!;
+        ctx.drawImage(canvas, 0, pg * sliceH, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+
+        if (pg > 0) pdf.addPage('a4', 'portrait');
+        pdf.addImage(pageCanvas.toDataURL('image/png', 1.0), 'PNG', 0, 0, 210, 297);
+      }
+
       pdf.save(`${doc.title.replace(/\s+/g, '_').toLowerCase() || 'cheatsheet'}.pdf`);
-      toast.success('PDF exported successfully!');
-    } catch {
-      toast.error('Failed to export PDF');
+      toast.success('PDF exported!');
+    } catch (err) {
+      console.error('[PDF Export]', err);
+      toast.error('Export failed.');
     } finally {
+      el.classList.remove('exporting');
       setIsExporting(false);
     }
-  }, [doc.bgColor, doc.title]);
+  }, [doc]);
 
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;

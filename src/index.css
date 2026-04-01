@@ -95,3 +95,14 @@
 ::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--muted-foreground));
 }
+
+/* ── PDF Export Mode ───────────────────────────────────────── */
+.canvas-artboard.exporting {
+  border: none !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+.canvas-artboard.exporting .page-divider {
+  display: none !important;
+}
+

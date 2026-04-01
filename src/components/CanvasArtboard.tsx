@@ -34,7 +34,7 @@ const CanvasArtboard = forwardRef<HTMLDivElement, Props>(
       margin: '0 auto',
       width: A4_WIDTH,
       height: A4_HEIGHT * pages,
-      boxShadow: '0 10px 40px -10px rgba(0,0,0,0.1)',
+      boxShadow: '0 10px 40px -10px rgba(0,0,0,0.25)',
       border: '1px solid hsl(var(--border))',
       overflow: 'hidden',
     };
