@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { type Block, type BlockType, type CheatsheetDoc, createBlock, cheatsheetTemplates } from '@/data/cheatsheetData';
