@@ -3,6 +3,8 @@ export type BlockType = 'heading' | 'text' | 'code' | 'image' | 'table' | 'divid
 export interface BlockBase {
   id: string;
   type: BlockType;
+  colSpan?: number; // how many grid columns this block spans (1 = default)
+  minHeight?: number; // optional min height in px
 }
 
 export interface HeadingBlock extends BlockBase {

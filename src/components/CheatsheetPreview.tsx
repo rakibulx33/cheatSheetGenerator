@@ -13,7 +13,7 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical } from 'lucide-react';
+import { GripVertical, Maximize2 } from 'lucide-react';
 import type { Block, CheatsheetDoc } from '@/data/cheatsheetData';
 
 interface Props {
@@ -27,7 +27,7 @@ interface Props {
 const CheatsheetPreview = forwardRef<HTMLDivElement, Props>(
   ({ doc, selectedBlockId, onSelectBlock, onUpdateBlock, onReorder }, ref) => {
     const sensors = useSensors(
-      useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+      useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
     );
 
     const handleDragEnd = (event: DragEndEvent) => {
@@ -67,6 +67,7 @@ const CheatsheetPreview = forwardRef<HTMLDivElement, Props>(
                   onSelect={() => onSelectBlock(block.id)}
                   onUpdate={(updates) => onUpdateBlock(block.id, updates)}
                   font={doc.font}
+                  maxCols={doc.columns}
                 />
               ))}
             </div>
@@ -83,30 +84,66 @@ interface SortableBlockProps {
   onSelect: () => void;
   onUpdate: (updates: Partial<Block>) => void;
   font: string;
+  maxCols: number;
 }
 
-function SortableBlock({ block, isSelected, onSelect, onUpdate, font }: SortableBlockProps) {
+function SortableBlock({ block, isSelected, onSelect, onUpdate, font, maxCols }: SortableBlockProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: block.id });
+  const [isResizing, setIsResizing] = useState(false);
+  const resizeRef = useRef<{ startY: number; startHeight: number } | null>(null);
+
+  const colSpan = block.colSpan || 1;
+  const isFullWidth = block.type === 'divider' || block.type === 'spacer' ||
+    (block.type === 'heading' && block.level === 1 && !block.colSpan);
+
+  const computedColSpan = isFullWidth ? maxCols : Math.min(colSpan, maxCols);
+
+  // Vertical resize handler
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const startY = e.clientY;
+    const startHeight = block.minHeight || 0;
+    setIsResizing(true);
+
+    const handleMove = (ev: MouseEvent) => {
+      const delta = ev.clientY - startY;
+      const newHeight = Math.max(20, startHeight + delta);
+      onUpdate({ minHeight: newHeight });
+    };
+
+    const handleUp = () => {
+      setIsResizing(false);
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+    };
+
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+  }, [block.minHeight, onUpdate]);
 
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
-    transition,
+    transition: isResizing ? 'none' : transition,
     opacity: isDragging ? 0.5 : 1,
-    outline: isSelected ? '2px solid hsl(165, 80%, 48%)' : '2px solid transparent',
-    outlineOffset: '2px',
+    // Use inset box-shadow instead of outline to avoid layout shifts
+    boxShadow: isSelected
+      ? 'inset 0 0 0 2px hsl(165, 80%, 48%), 0 0 0 1px hsl(165, 80%, 48%)'
+      : 'none',
     borderRadius: '6px',
     position: 'relative',
     cursor: 'pointer',
+    gridColumn: maxCols > 1 ? `span ${computedColSpan}` : undefined,
+    minHeight: block.minHeight ? `${block.minHeight}px` : undefined,
+    // Ensure stable sizing
+    boxSizing: 'border-box',
+    overflow: 'hidden',
   };
-
-  // Full-width blocks span all columns
-  const isFullWidth = block.type === 'divider' || block.type === 'spacer' ||
-    (block.type === 'heading' && block.level === 1);
 
   return (
     <div
       ref={setNodeRef}
-      style={{ ...style, gridColumn: isFullWidth ? '1 / -1' : undefined }}
+      style={style}
       onClick={(e) => { e.stopPropagation(); onSelect(); }}
       className="group"
     >
@@ -114,11 +151,64 @@ function SortableBlock({ block, isSelected, onSelect, onUpdate, font }: Sortable
       <div
         {...attributes}
         {...listeners}
-        className="absolute -left-6 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing"
-        style={{ color: 'hsl(var(--muted-foreground))' }}
+        className="absolute -left-1 top-0 z-10 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing rounded"
+        style={{
+          color: 'hsl(var(--muted-foreground))',
+          background: 'hsl(var(--popover))',
+          padding: '2px',
+          transform: 'translateX(-100%)',
+        }}
       >
         <GripVertical className="w-4 h-4" />
       </div>
+
+      {/* Resize handle (bottom-right corner) */}
+      {isSelected && (
+        <div
+          onMouseDown={handleResizeStart}
+          className="absolute bottom-0 right-0 z-10 cursor-ns-resize"
+          style={{
+            width: '24px',
+            height: '24px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'hsl(165, 80%, 48%)',
+            borderRadius: '6px 0 6px 0',
+            color: 'hsl(var(--primary-foreground))',
+          }}
+        >
+          <Maximize2 className="w-3 h-3" />
+        </div>
+      )}
+
+      {/* Column span indicator */}
+      {isSelected && maxCols > 1 && (
+        <div
+          className="absolute -top-1 right-0 z-10 flex gap-0.5"
+          style={{ transform: 'translateY(-100%)' }}
+        >
+          {Array.from({ length: maxCols }, (_, i) => (
+            <button
+              key={i}
+              onClick={(e) => {
+                e.stopPropagation();
+                onUpdate({ colSpan: i + 1 });
+              }}
+              style={{
+                width: '16px',
+                height: '10px',
+                borderRadius: '2px',
+                border: 'none',
+                cursor: 'pointer',
+                background: i < computedColSpan ? 'hsl(165, 80%, 48%)' : 'hsl(var(--border))',
+                transition: 'background 0.15s',
+              }}
+              title={`Span ${i + 1} column${i > 0 ? 's' : ''}`}
+            />
+          ))}
+        </div>
+      )}
 
       <BlockRenderer block={block} onUpdate={onUpdate} isSelected={isSelected} font={font} />
     </div>
@@ -156,9 +246,12 @@ function BlockRenderer({ block, onUpdate, isSelected, font }: BlockRendererProps
 }
 
 function EditableHeading({ block, onUpdate, isSelected }: { block: Extract<Block, { type: 'heading' }>; onUpdate: (u: Partial<Block>) => void; isSelected: boolean }) {
+  const ref = useRef<HTMLDivElement>(null);
   const sizes = { 1: '28px', 2: '18px', 3: '15px' };
+
   return (
     <div
+      ref={ref}
       contentEditable={isSelected}
       suppressContentEditableWarning
       onBlur={(e) => onUpdate({ content: e.currentTarget.textContent || '' })}
@@ -170,7 +263,8 @@ function EditableHeading({ block, onUpdate, isSelected }: { block: Extract<Block
         letterSpacing: block.level === 1 ? '-0.5px' : '0.3px',
         textTransform: block.level > 1 ? 'uppercase' : undefined,
         outline: 'none',
-        padding: '4px',
+        padding: '4px 6px',
+        minHeight: '1em',
       }}
     >
       {block.content}
@@ -191,8 +285,9 @@ function EditableText({ block, onUpdate, isSelected }: { block: Extract<Block, {
         fontWeight: block.bold ? 700 : 400,
         fontStyle: block.italic ? 'italic' : 'normal',
         outline: 'none',
-        padding: '4px',
+        padding: '4px 6px',
         lineHeight: 1.6,
+        minHeight: '1em',
       }}
     >
       {block.content}
@@ -231,6 +326,7 @@ function EditableCode({ block, onUpdate, isSelected }: { block: Extract<Block, {
           ref={textareaRef}
           value={block.code}
           onChange={(e) => onUpdate({ code: e.target.value })}
+          onClick={(e) => e.stopPropagation()}
           style={{
             width: '100%',
             background: block.bgColor,
@@ -242,6 +338,7 @@ function EditableCode({ block, onUpdate, isSelected }: { block: Extract<Block, {
             outline: 'none',
             resize: 'none',
             lineHeight: 1.6,
+            display: 'block',
           }}
         />
       ) : (
@@ -329,6 +426,7 @@ function EditableTable({ block, onUpdate, isSelected, font }: { block: Extract<B
                   contentEditable={isSelected}
                   suppressContentEditableWarning
                   onBlur={(e) => updateCell(ri, ci, e.currentTarget.textContent || '')}
+                  onClick={(e) => isSelected && e.stopPropagation()}
                   style={{
                     background: isHeader ? block.headerBg : block.cellBg,
                     color: isHeader ? block.headerText : block.cellText,
@@ -372,6 +470,7 @@ function EditableList({ block, onUpdate, isSelected }: { block: Extract<Block, {
             newItems[i] = e.currentTarget.textContent || '';
             onUpdate({ items: newItems });
           }}
+          onClick={(e) => isSelected && e.stopPropagation()}
           style={{ outline: 'none' }}
         >
           {item}

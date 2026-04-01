@@ -146,6 +146,27 @@ export default function EditorPanel({
                 </Button>
               </div>
 
+              {/* Resize / Span controls */}
+              <div className="space-y-3 p-3 rounded-lg border border-border bg-secondary/30">
+                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Size & Span</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <NumberField
+                    label="Column Span"
+                    value={selectedBlock.colSpan || 1}
+                    onChange={(v) => onUpdateBlock(selectedBlockId!, { colSpan: v })}
+                    min={1}
+                    max={doc.columns}
+                  />
+                  <NumberField
+                    label="Min Height (px)"
+                    value={selectedBlock.minHeight || 0}
+                    onChange={(v) => onUpdateBlock(selectedBlockId!, { minHeight: v || undefined })}
+                    min={0}
+                    max={800}
+                  />
+                </div>
+              </div>
+
               <BlockProperties block={selectedBlock} onUpdate={(u) => onUpdateBlock(selectedBlockId!, u)} />
             </div>
           ) : (
