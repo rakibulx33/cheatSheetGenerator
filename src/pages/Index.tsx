@@ -1,10 +1,11 @@
-import { useState, useRef, useCallback } from 'react';
-import { arrayMove } from '@dnd-kit/sortable';
+import { useEffect, useRef, useCallback } from 'react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { type Block, type BlockType, type CheatsheetDoc, createBlock, cheatsheetTemplates } from '@/data/cheatsheetData';
-import EditorPanel from '@/components/EditorPanel';
-import CheatsheetPreview from '@/components/CheatsheetPreview';
+import { useHistory } from '@/hooks/useHistory';
+import ToolsPanel from '@/components/ToolsPanel';
+import PropertiesPanel from '@/components/PropertiesPanel';
+import CanvasArtboard from '@/components/CanvasArtboard';
 import { toast } from 'sonner';
 
 const deepCloneDoc = (doc: CheatsheetDoc): CheatsheetDoc => {
@@ -15,53 +16,85 @@ const deepCloneDoc = (doc: CheatsheetDoc): CheatsheetDoc => {
 };
 
 export default function Index() {
-  const [doc, setDoc] = useState<CheatsheetDoc>(() => deepCloneDoc(cheatsheetTemplates[0].doc));
+  const [doc, setDoc, undo, redo, resetHistory] = useHistory<CheatsheetDoc>(() => deepCloneDoc(cheatsheetTemplates[0].doc));
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const previewRef = useRef<HTMLDivElement>(null);
 
   const selectedBlock = selectedBlockId ? doc.blocks.find((b) => b.id === selectedBlockId) || null : null;
 
+  // Listen for global Undo/Redo shortcuts (Ctrl+Z, Ctrl+Y/Ctrl+Shift+Z)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't intercept shortcuts if the user is typing in a form field or editing block content directly
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === 'INPUT' || 
+        target.tagName === 'TEXTAREA' || 
+        target.tagName === 'SELECT' || 
+        target.isContentEditable
+      ) {
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault(); // Stop standard browser action
+        if (e.shiftKey) {
+          redo();
+          toast('Redo', { position: 'top-center' });
+        } else {
+          undo();
+          toast('Undo', { position: 'top-center' });
+        }
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        redo();
+        toast('Redo', { position: 'top-center' });
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [undo, redo]);
+
   const updateDoc = useCallback((updates: Partial<CheatsheetDoc>) => {
     setDoc((prev) => ({ ...prev, ...updates }));
-  }, []);
+  }, [setDoc]);
 
   const addBlock = useCallback((type: BlockType) => {
     const block = createBlock(type);
+    
+    // Slight offset if there are multiple blocks to avoid precise overlapping stack
+    const offset = (doc.blocks.length % 5) * 20;
+    block.x += offset;
+    block.y += offset;
+
     setDoc((prev) => ({ ...prev, blocks: [...prev.blocks, block] }));
     setSelectedBlockId(block.id);
-  }, []);
+  }, [doc.blocks.length, setDoc]);
 
   const deleteBlock = useCallback((id: string) => {
     setDoc((prev) => ({ ...prev, blocks: prev.blocks.filter((b) => b.id !== id) }));
     setSelectedBlockId(null);
-  }, []);
+  }, [setDoc]);
 
   const updateBlock = useCallback((id: string, updates: Partial<Block>) => {
     setDoc((prev) => ({
       ...prev,
       blocks: prev.blocks.map((b) => (b.id === id ? { ...b, ...updates } as Block : b)),
     }));
-  }, []);
-
-  const reorderBlocks = useCallback((activeId: string, overId: string) => {
-    setDoc((prev) => {
-      const oldIndex = prev.blocks.findIndex((b) => b.id === activeId);
-      const newIndex = prev.blocks.findIndex((b) => b.id === overId);
-      return { ...prev, blocks: arrayMove(prev.blocks, oldIndex, newIndex) };
-    });
-  }, []);
+  }, [setDoc]);
 
   const loadTemplate = useCallback((templateDoc: CheatsheetDoc) => {
-    setDoc(deepCloneDoc(templateDoc));
+    resetHistory(deepCloneDoc(templateDoc));
     setSelectedBlockId(null);
-  }, []);
+  }, [resetHistory]);
 
   const exportPdf = useCallback(async () => {
     if (!previewRef.current) return;
     setIsExporting(true);
     try {
-      // Temporarily deselect for clean export
+      // Temporarily deselect for clean export without resize handles 
       setSelectedBlockId(null);
       await new Promise((r) => setTimeout(r, 100));
 
@@ -87,37 +120,46 @@ export default function Index() {
     } finally {
       setIsExporting(false);
     }
-  }, [doc]);
+  }, [doc.bgColor, doc.title]);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
-      <div className="w-[360px] flex-shrink-0 overflow-hidden">
-        <EditorPanel
-          doc={doc}
-          selectedBlockId={selectedBlockId}
-          selectedBlock={selectedBlock}
-          onUpdateDoc={updateDoc}
-          onAddBlock={addBlock}
-          onDeleteBlock={deleteBlock}
-          onUpdateBlock={updateBlock}
-          onLoadTemplate={loadTemplate}
-          onExportPdf={exportPdf}
-          isExporting={isExporting}
-        />
-      </div>
+    <div className="flex h-screen w-screen overflow-hidden bg-background">
+      
+      {/* Left Sidebar: Tools & Settings */}
+      <ToolsPanel
+        doc={doc}
+        onUpdateDoc={updateDoc}
+        onAddBlock={addBlock}
+        onLoadTemplate={loadTemplate}
+        onExportPdf={exportPdf}
+        isExporting={isExporting}
+      />
 
-      <div className="flex-1 overflow-auto p-6">
-        <div className="min-w-[700px] max-w-[1100px] mx-auto shadow-2xl rounded-xl overflow-hidden border border-border animate-fade-in">
-          <CheatsheetPreview
+      {/* Center Artboard Area */}
+      <div 
+        className="flex-1 overflow-auto bg-neutral-100/50 p-8 relative flex shadow-inner" 
+        onClick={() => setSelectedBlockId(null)}
+      >
+        {/* We use margin auto to keep it centered if infinite, or strictly centered if A4 */}
+        <div className="m-auto animate-fade-in">
+          <CanvasArtboard
             ref={previewRef}
             doc={doc}
             selectedBlockId={selectedBlockId}
             onSelectBlock={setSelectedBlockId}
             onUpdateBlock={updateBlock}
-            onReorder={reorderBlocks}
           />
         </div>
       </div>
+
+      {/* Right Sidebar: Selected Block Properties */}
+      <PropertiesPanel
+        selectedBlockId={selectedBlockId}
+        selectedBlock={selectedBlock}
+        onDeleteBlock={deleteBlock}
+        onUpdateBlock={updateBlock}
+      />
+
     </div>
   );
 }
